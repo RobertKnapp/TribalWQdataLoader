@@ -1,0 +1,26 @@
+# .Renviron settings
+# ==========================================
+# DATABASE CONFIGURATION
+# ==========================================
+# Set to TRUE if you need to choose between Test/Prod environments
+MULTIPLE_ENVIRONMENTS=FALSE
+
+# System DSNs (Leave blank if you do not use Windows SSO/DSNs)
+DB_DSN_PROD=twqd_prod
+DB_DSN_TEST=twqd_test
+
+# Server Addresses (Can be the same if you don't have separate external IPs)
+DB_SERVER_INT=SEASTAR\SQLEXP2017
+DB_SERVER_EXT=SEASTAR\SQLEXP2017
+
+# Preferred ODBC Driver
+DB_DRIVER=ODBC Driver 17 for SQL Server
+
+# ==========================================
+# SECURE CREDENTIALS
+# ==========================================
+# Leave blank if you exclusively use a DSN with Windows Single Sign-On
+DB_USER=your_username_here
+DB_PASSWORD=super_secret_password
+
+# (Remember to leave one blank line at the very end of the file).
