@@ -23,10 +23,22 @@ library(tidyverse)
 library(readxl)
 
 # --- 0. HELPER FUNCTION: LOGGING ---
-log_file <- paste0("Log_DataLoad_", format(Sys.time(), "%Y%m%d_%H%M%S"), ".txt")
+# 1. Define the logs directory path
+log_dir <- "logs/"
+
+# 2. Check if the logs folder exists, and create it if it doesn't
+if(!dir.exists(log_dir)) dir.create(log_dir)
+
+# 3. Prepend the log directory path to the dynamically generated file name
+log_file <- paste0(log_dir, "Log_DataLoad_", format(Sys.time(), "%Y%m%d_%H%M%S"), ".txt")
+
 write_log <- function(message) { 
   timestamped_msg <- paste0("[", format(Sys.time(), "%Y-%m-%d %H:%M:%S"), "] ", message) 
+  
+  # Print to the R console
   cat(timestamped_msg, "\n") 
+  
+  # Write to the file in the logs folder
   write(timestamped_msg, file = log_file, append = TRUE) 
 }
 
