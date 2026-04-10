@@ -43,16 +43,12 @@ write_log <- function(message) {
 }
 
 # --- 1. ZERO-PROMPT CONNECTION MANAGER ---
-get_db_connection <- function(target_db) {
+# Now accepts both target_db and env arguments from the main menu
+get_db_connection <- function(target_db, env = "Production") {
   con <- NULL
   
-  is_multi <- as.logical(Sys.getenv("MULTIPLE_ENVIRONMENTS", unset = "FALSE"))
-  if (is_multi) {
-    env <- select.list(c("Production", "Test"), title = paste("Select", target_db, "Environment:"))
-    dsn <- ifelse(env == "Test", Sys.getenv("DB_DSN_TEST"), Sys.getenv("DB_DSN_PROD"))
-  } else {
-    dsn <- Sys.getenv("DB_DSN_PROD")
-  }
+  # Fetch the correct DSN based on the selected environment
+  dsn <- ifelse(env == "Test", Sys.getenv("DB_DSN_TEST"), Sys.getenv("DB_DSN_PROD"))
   
   drv <- Sys.getenv("DB_DRIVER", unset = "ODBC Driver 17 for SQL Server")
   srv_int <- Sys.getenv("DB_SERVER_INT")
@@ -61,7 +57,7 @@ get_db_connection <- function(target_db) {
   p <- Sys.getenv("DB_PASSWORD")
   
   if (dsn != "") {
-    write_log(paste("Attempting SSO connection to", target_db, "via DSN..."))
+    write_log(paste("Attempting SSO connection to", target_db, env, "via DSN..."))
     try({ con <- dbConnect(odbc::odbc(), dsn, Database = target_db, Trusted_Connection = "Yes") }, silent = TRUE)
   }
   if (!is.null(con) && dbIsValid(con)) return(con)
@@ -83,14 +79,28 @@ get_db_connection <- function(target_db) {
 # --- 2. MAIN INTERACTIVE WORKFLOW LOOP ---
 run_data_loader <- function() {
   
-  # Define relative paths
   upload_dir <- "ready_for_upload/"
   if(!dir.exists(upload_dir)) dir.create(upload_dir)
   
+  # 1. Check .Renviron for multiple environments flag
+  is_multi <- as.logical(Sys.getenv("MULTIPLE_ENVIRONMENTS", unset = "FALSE"))
+  
+  # 2. Dynamically build the menu choices
+  if (is_multi) {
+    menu_choices <- c(
+      "TWQD - Production", "TWQD - Test", 
+      "WQTS - Production", "WQTS - Test", 
+      "Exit Script"
+    )
+  } else {
+    menu_choices <- c("Load Data to TWQD", "Load Data to WQTS", "Exit Script")
+  }
+  
   while(TRUE) {
+    # 3. Present the single combined popup menu
     action <- select.list(
-      choices = c("Load Data to TWQD", "Load Data to WQTS", "Exit Script"),
-      title = "\nMAIN MENU: What would you like to do?",
+      choices = menu_choices,
+      title = "MAIN MENU: Select Database destination",
       graphics = TRUE
     )
     
@@ -99,11 +109,15 @@ run_data_loader <- function() {
       break
     }
     
+    # 4. Parse the user's single selection
+    target_db <- ifelse(grepl("TWQD", action), "TWQD", "WQTS")
+    env <- ifelse(grepl("Test", action), "Test", "Production")
+    
     # =========================================================
     # WORKFLOW A: TWQD (Projects, Sites, Discrete Data)
     # =========================================================
-    if (action == "Load Data to TWQD") {
-      write_log("\n--- STARTING TWQD LOAD ---")
+    if (target_db == "TWQD") {
+      write_log(paste("\n--- STARTING TWQD", toupper(env), "LOAD ---"))
       
       file_act <- paste0(upload_dir, "Activities.xlsx")
       file_res <- paste0(upload_dir, "Results.xlsx")
@@ -118,48 +132,22 @@ run_data_loader <- function() {
       new_results <- read_excel(file_res)
       
       # --- 1. MANDATORY DATA FORMATTING ---
-      # Apply formatting based on NWIFC templates to prevent SQL Type/Truncation Errors
-      
-      # --- A. Activities Formatting ---
-      # 1. Dates: SQL expects DATE format
       new_activities$StartDate <- as.Date(new_activities$StartDate)
-      if("EndDate" %in% colnames(new_activities)) {
-        new_activities$EndDate <- as.Date(new_activities$EndDate)
-      }
-      
-      # 2. Times: Safely extract ONLY the "HH:MM" using stringr
-      # This strips Excel dummy dates ("1899-12-31") and prevents right truncation
+      if("EndDate" %in% colnames(new_activities)) new_activities$EndDate <- as.Date(new_activities$EndDate)
       new_activities$StartTime <- str_extract(as.character(new_activities$StartTime), "\\d{2}:\\d{2}")
-      
-      if("EndTime" %in% colnames(new_activities)) {
-        new_activities$EndTime <- str_extract(as.character(new_activities$EndTime), "\\d{2}:\\d{2}")
-      }
-      
-      # 3. Timestamps: Use Sys.time() for DATETIME or Sys.Date() if the column is strict DATE
+      if("EndTime" %in% colnames(new_activities)) new_activities$EndTime <- str_extract(as.character(new_activities$EndTime), "\\d{2}:\\d{2}")
       new_activities$LastChangeDate <- Sys.time() 
+      if("DeletedDate" %in% colnames(new_activities)) new_activities$DeletedDate <- as.Date(new_activities$DeletedDate)
       
-      if("DeletedDate" %in% colnames(new_activities)) {
-        new_activities$DeletedDate <- as.Date(new_activities$DeletedDate)
-      }
-      
-      # --- B. Results Formatting ---
-      # 1. Result Values: Varchar in SQL, converting to character prevents extra decimal digits
       new_results$ResultMeasureValue <- as.character(new_results$ResultMeasureValue) 
-      
-      # 2. Dates and Timestamps
       new_results$LastChangeDate <- Sys.time()
-      
-      if("SampleDateTime" %in% colnames(new_results)) {
-        new_results$SampleDateTime <- as.Date(new_results$SampleDateTime) 
-      }
-      
-      if("DeletedDate" %in% colnames(new_results)) {
-        new_results$DeletedDate <- as.Date(new_results$DeletedDate)
-      }
+      if("SampleDateTime" %in% colnames(new_results)) new_results$SampleDateTime <- as.Date(new_results$SampleDateTime) 
+      if("DeletedDate" %in% colnames(new_results)) new_results$DeletedDate <- as.Date(new_results$DeletedDate)
       
       write_log(paste("Loaded Input Files. Activities:", nrow(new_activities), "Results:", nrow(new_results)))
       
-      con <- get_db_connection("TWQD")
+      # Pass the parsed environment selection into the connection manager
+      con <- get_db_connection("TWQD", env)
       
       # --- PRE-FLIGHT CHECKS ---
       # A. Check Projects
