@@ -34,3 +34,5 @@ Never type your password into the R script. Instead, we use a hidden `.Renviron`
    * `Projects.xlsx` (Used automatically if a project is missing)
    * `MonLocs.xlsx` (Used automatically if a site is missing)
   
+   ##  Usage
+Simply open the R project and run the master script. An interactive menu will appear asking if you want to load data to TWQD or WQTS. The script handles all database routing, data formatting, and upload logs automatically! Check the `logs/` folder for a detailed receipt of your upload.
